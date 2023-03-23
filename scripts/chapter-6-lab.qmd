@@ -1,0 +1,355 @@
+---
+title: "chapter-6-lab"
+format: html
+editor: source
+---
+
+# Introductory
+
+-   In this lab, we will perform Lasso and Ridge regressions using the
+    `glmnet` library. We will use the `Hitters` data from the `ISLR2`
+    package.
+-   The `glmnet` function is used to fit ridge and lasso regression
+    models.
+-   The syntax of the `glmnet` function is slightly different from other
+    models.
+-   In `glmnet`, we have to pass `y` as a vector and `x` as a matrix.
+-   We also need to make sure that the data has no missing values.
+-   Lets load the libraries:
+
+```{r}
+library(glmnet)
+library(ISLR2)
+```
+
+# Data Preparation
+
+-   First we remove all missing values in the data
+
+```{r}
+Hitters <- na.omit(Hitters)
+```
+
+-   Now let us create the `x` matrix and the `y` vector.
+-   The `model.matrix` function from the `stats` package is very useful
+    in creating the `x` matrix as it *automatically transforms all
+    factor variables* into dummy variables
+
+```{r}
+x <- model.matrix(Salary ~ ., Hitters)[, -1]
+y <- Hitters$Salary
+```
+
+```{r}
+length(y)
+nrow(x)
+```
+
+# Perform Ridge Regression
+
+-   Now let us run the ridge regression.
+
+-   The `glmnet` function has an `alpha` argument, which allows us to
+    specify whether we want to fit a ridge model (**alpha = 0**) or a
+    lasso model (**alpha = 1**)
+
+    ## Specify the grid for $\lambda$
+
+-   The `glmnet` function can perform the ridge / lasso regressions for
+    an automatically selected range of $\lambda$ values.
+
+-   However, we can also specify the range like so:
+
+```{r}
+grid <- 10^seq(10, -2, length = 100)
+head(grid)
+```
+
+## Specify the model
+
+-   Now we can specify the model.
+-   Note that `glmnet` automatically standardizes all the x variables.
+    we can set `standardize` to be `FALSE` if we want to turn it off.
+
+```{r}
+ridge.mod <- glmnet(x, y, alpha = 0, lambda = grid, 
+                    standardize = TRUE)
+```
+
+## Exploring the ridge model
+
+-   The dimensions of the coefficients tell us that it is a matrix with
+    20 rows corresponding to the 19 predictors plus 1 intercept and 100
+    columns corresponding to each value of $\lambda$
+
+```{r}
+dim(coef(ridge.mod))
+```
+
+-   Since we specified the grid in a way that $\lambda$ starts from a
+    very high value to a very low value. This means that the
+    coefficients to be highly restricted (or very small) when the value
+    of $\lambda$ is large and not as restricted (or closer to the least
+    square values when the value of $\lambda$ is low.
+
+-   Lets take a look at the coefficients
+
+### Considering a high Lambda
+
+#### Get the value of lambda
+
+-   See that the value of the 20th lambda is very high, whereas the
+    value of the 85th lambda is very low
+
+```{r}
+ridge.mod$lambda[20]
+ridge.mod$lambda[85]
+```
+
+#### Get the coefficents for the predictors based on a high Lambda
+
+-   Note that the coefficients are very small when Lambda is very high
+    and vice versa
+
+```{r}
+coef(ridge.mod)[, 20]
+```
+
+```{r}
+coef(ridge.mod)[, 85]
+```
+
+#### Calculate the $l_2$ norm for the betas
+
+-   Remember that the $l_2$ norms is given as:
+
+    $||\beta||_2 = \sqrt{\sum\limits_{j=1}^p \beta_j^2}$
+
+-   We use this formula to calculate $l_2$ norm and see that its value
+    is very low for a high lambda and vice versa
+
+```{r}
+sqrt(sum(coef(ridge.mod)[-1, 20]^2))
+```
+
+```{r}
+sqrt(sum(coef(ridge.mod)[-1, 85]^2))
+```
+
+#### Get coefficients for a new value of $\lambda$
+
+We can use the predict function to get coefficients for a new value of
+$\lambda$ (lets say 200) like so:
+
+```{r}
+predict(ridge.mod, s = 200, type = "coefficients")
+```
+
+### Evaluate the ridge model
+
+#### Split the data into test and training set
+
+```{r}
+set.seed(011235)
+train <- sample (1:nrow(x), nrow(x) / 2)
+test <- (-train)
+y.test <- y[test]
+```
+
+#### Calculate MSE for a given lambda
+
+-   First fit the ridge model
+
+```{r}
+ridge.mod <- glmnet(x[train,], y[train], alpha = 0, 
+                    standardize = T, lambda = grid)
+```
+
+-   Next, predict the values of `y` using $\lambda$ = 4 and use the test
+    dataset as the matrix of `newx`
+
+```{r}
+ridge.pred <- predict(ridge.mod, s = 4, newx = x[test, ])
+```
+
+-   Calculate the Mean Square Error
+
+```{r}
+mean((ridge.pred-y.test)^2)
+```
+
+#### Calculate MSE for a very high lambda
+
+```{r}
+ridge.pred.null <- predict(ridge.mod, newx = x[test, ],
+                      s = 1e10)
+```
+
+```{r}
+mean((ridge.pred.null-y.test)^2)
+```
+
+-   Note that a very high lamda is also equivalent to a NULL model. In
+    case of the Null model, the predicted response would be equal to the
+    mean of `y[train]`. Note that they give the same results.
+
+```{r}
+mean((mean(y[train]) - y.test)^2)
+```
+
+#### Calculate MSE for a very low lambda model
+
+```{r}
+ridge.pred.zero <- predict(ridge.mod, s = 0, 
+                           newx = x[test, ], 
+                           exact = T, 
+                           x = x[train, ], 
+                           y = y[train])
+# calculate the MSE 
+mean((ridge.pred.zero-y.test)^2)
+```
+
+1.  Note that using lambda as 0 is equivalent to using a least square
+    model
+
+```{r}
+model_lm <- lm(y ~ x, subset = train)
+coef(model_lm)
+```
+
+-   Compare the coefficients from the `lm` model with the
+
+```{r}
+predict(ridge.mod, s = 0, type = "coefficients", 
+        newx = x[test,], exact = T, 
+        x = x[train, ], y = y[train])
+```
+
+### Identify best lambda using cross validation
+
+1.  We can now use the `cv.glmnet` function to identify the best lambda
+
+```{r}
+set.seed(011235)
+cv.out.ridge <- cv.glmnet(x[train,], y[train], 
+                          alpha = 0, nfolds = 10) 
+```
+
+-   Plot the output of cross-validation
+
+```{r}
+plot(cv.out.ridge)
+```
+
+-   Identify the best lambda
+
+```{r}
+best_lambda_ridge <- cv.out.ridge$lambda.min
+```
+
+-   Calculate the MSE using best lambda
+
+    ```{r}
+    ridge.pred.bestlam <- predict(ridge.mod, s = best_lambda_ridge,
+                                  newx = x[test,])
+    # calculate MSE
+    mean((ridge.pred.bestlam-y.test)^2)
+    ```
+
+-   Note that this is the lowest MSE so far. We can now use this Lambda
+    for our final model
+
+#### Final model using the best lambda
+
+```{r}
+ridge.mod.final <- glmnet(x, y, alpha = 0)
+predict(ridge.mod.final, s = best_lambda_ridge,
+        type = "coefficients")
+```
+
+-   This is the final model using ridge regression. We notice that none
+    of the values of the coefficients are exactly 0. Because that is
+    what ridge regression does.
+
+# Perform Lasso Regression
+
+-   Specify a grid for Lasso
+
+```{r}
+grid_lasso <- 10^seq(10, -2, length = 100)
+```
+
+-   Specify the lasso model
+
+```{r}
+lasso.mod <- glmnet(x[train,], y[train], 
+                        alpha = 1, 
+                        grid = grid_lasso)
+```
+
+```{r}
+plot(lasso.mod$lambda)
+plot(lasso.mod)
+```
+
+
+## Compare coefficients with different values of lambda
+
+```{r}
+lasso.mod$lambda[10]
+lasso.mod$lambda[77]
+```
+```{r}
+coef(lasso.mod)[, 10]
+coef(lasso.mod)[, 77]
+```
+
+
+## Compare MSEs
+
+### Very high lambda
+
+```{r}
+lass.pred.high.lamb <- predict(lasso.mod, s = 1e10, 
+                                   newx = x[test,],
+                                   exact = T, 
+                                   x = x[train,], y = y[train])
+mean((lass.pred.high.lamb-y.test)^2)
+```
+### Very low lambda
+```{r}
+lass.pred.low.lamb <- predict(lasso.mod, s = 0, 
+                                   newx = x[test,],
+                                   exact = T, 
+                                   x = x[train,], y = y[train])
+mean((lass.pred.low.lamb-y.test)^2)
+```
+
+## Identify best lambda for Lasso
+```{r}
+cv.lasso <- cv.glmnet(x[test,], y.test, alpha = 1)
+plot(cv.lasso)
+```
+```{r}
+best_lambda_lasso <- cv.lasso$lambda.min
+log(best_lambda_lasso)
+```
+
+### Get the MSE for the best lambda
+```{r}
+lasso.mod.best.lamb <- predict(lasso.mod, s = best_lambda_lasso,
+                               newx = x[test,], 
+                               exact = T, x = x[train,], y = y[train])
+mean((lasso.mod.best.lamb-y.test)^2)
+```
+This looks like the minimum MSE as it is lower than the MSEs obtained from the max and min Lambdas above
+
+* We now extract the coefficients for the model with the best lambda
+```{r}
+lasso.mod.final <- predict(lasso.mod, s = best_lambda_lasso,
+                               newx = x[test,], type = "coefficients")
+lasso.mod.final
+```
+
+This is the final model, which we can see is much more sparse than the final model in the 
+
