@@ -1,0 +1,76 @@
+
+```{r load-packages}
+library(party)
+library(randomForest)
+library(haven)
+```
+
+```{r load-data}
+vars <- c("s439_1", "s441_1", "v012", "v133", "s190s", "v201", "v208", "v212",
+          "v220", "v228", "v437", "v438", "m14_1", "m15_1", "v463a", "v463b",
+          "v463c", "v463d", "v463e", "v463f", "v463g", "s716", "s707", "s710c", "s710e")
+
+df.tree <- read_dta("C:/Users/arnab/OneDrive/Desktop/Analyses/Datasets/NFHS-4/Data/Individual Recode/IAIR74DT/IAIR74FL.DTA", col_select = all_of(vars))
+
+df.tree$s441_1[df.tree$s441_1 == 8] <- NA
+
+df.tree <- na.omit(df.tree)
+
+glimpse(df.tree)
+
+```
+
+
+```{r rename-vars}
+df.tree <- rename(df.tree, age = v012)
+df.tree <- rename(df.tree, edu = v133)
+df.tree <- rename(df.tree, wealth_cat = s190s)
+df.tree <- rename(df.tree, tot_chil = v201)
+df.tree <- rename(df.tree, num_birth_5 = v208)
+df.tree <- rename(df.tree, age_fbirth = v212)
+df.tree <- rename(df.tree, mar_fbirth = v220)
+df.tree <- rename(df.tree, termi_preg = v228)
+df.tree <- rename(df.tree, smk_cig = v463a)
+df.tree <- rename(df.tree, smk_pip = v463b)
+df.tree <- rename(df.tree, chew_tob = v463c)
+df.tree <- rename(df.tree, snuff = v463d)
+df.tree <- rename(df.tree, smk_cigar = v463e)
+df.tree <- rename(df.tree, guthka = v463f)
+df.tree <- rename(df.tree, pan_tob = v463g)
+df.tree <- rename(df.tree, alch = s716)
+df.tree <- rename(df.tree, hookah = s710c)
+df.tree <- rename(df.tree, khaini = s710e)
+df.tree <- rename(df.tree, wgt = v437)
+df.tree <- rename(df.tree, hgt = v438)
+df.tree <- rename(df.tree, num_anc = m14_1)
+df.tree <- rename(df.tree, place_del = m15_1)
+df.tree <- rename(df.tree, breach = s439_1)
+# df.tree <- rename(df.tree, prolonged = s440_1)
+df.tree <- rename(df.tree, pph = s441_1)
+
+```
+
+
+```{r cond-tree}
+treemodel_pph = ctree(pph~., data = df.tree, controls=ctree_control(testtype = c("MonteCarlo"), 
+                                                                  mincriterion = 0.95, savesplitstats = TRUE,
+                                                                  maxdepth = 5))
+treemodel_pph
+plot(treemodel_pph, type = "simple")
+```
+
+
+
+
+
+
+```{r random-forest}
+set.seed(2020)
+
+forest_pph <- randomForest(as.factor(pph)~., data = df.tree, ntree = 100, importance = TRUE)
+
+forest_pph
+importance(forest_pph)
+varImpPlot(forest_pph)
+
+```

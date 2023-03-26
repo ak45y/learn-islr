@@ -1,0 +1,108 @@
+
+### Problem Statement
+
+Complications during delivery is a serious public health challenge that leads to Maternal and Neonatal 
+Mortality. These complications include Breech Presentation, Prolonged Labor and Excessive Bleeding 
+at the time of delivery. The problem is severe in Low and Middle Income countries like India where 
+Maternal and Neonatal Mortality Rates are very high. 
+
+A lot of Maternal and Neonatal deaths can be averted if Complications during delivery can be 
+predicted correctly based on demographic data. Our goal in this project is to choose the right statistical learning
+method(s) that would lead to the most accurate predictions 
+
+
+### The Dataset
+
+We use the Demographic Health Survey (DHS) Dataset for India which was released in 2015-16 and 
+comprises of a nationally representative sample of women in the age group of 15-49 years who had a
+birth in the last 5 years. The Dataset comprises of 699686 cases.
+
+The dataset contains information on whether the women faced any complications related to 
+Breech Presentation, Prolonged Labor and Excessive Bleeding during delivery. We recode these variables 
+below to create a dichotomous variable that is coded 1 if women faced any of the three complications
+and 0 if they did not face any of the complications during their last pregnancy
+
+
+### Dependent Variable
+
+The Dependent Variable will be created using the following variables: s439_1 (experience a breech presentation), 
+s440_1 (experienced prolonged labor) and s441_1 (Experienced Excessive Bleeding). 
+
+
+### Predictors
+
+We consider the following predictors for the model:
+
+Current age of the respondent in Yrs (v012)
+Level of education (v133)
+Household Wealth Category (s190s)
+
+Total children ever born (v201)
+Number of births in last 5 years (v208)
+Age of respondent at first birth (v212)
+Marriage to first birth interval in months (v220)
+Ever had a terminated pregnancy (v228)
+
+Weight of respondent in Kg (v437)
+Height of respondent in Cm (v438)
+Timing of first Antenatal Checkup in months (m13_1)
+Number of antenatal visits during pregnancy (m14_1)
+Place of delivery(m15_1)
+
+Smokes cigarettes (v463a)
+Smokes pipe (v463b)
+Uses chewing tobacco (v463c)
+Uses snuff (v463d)
+Smokes cigars (v463e)
+Gutkha/Paan masala with tobacco (v463f)
+Paan with tobacco (v463g)
+Drinks alcohol (s716)
+Currently smoke bidis (s707)
+Bidis smoked in last 24 hours (s708)
+Type of tobacco used: Hookah (s710c)
+Type of tobacco used: Khaini(s710e)
+
+Experienced any less severe violence (D105A-C,J) by husband/partner (d106)
+Experienced any severe violence (D105D-F) by husband/partner(d107)
+Experienced any sexual violence (D105H-I,K) by husband/partner (d108)
+Experienced any of listed husband/partner's actions (D110x series) (d111)
+Husband/partner drinks alcohol (d113)
+Pregnancy end in miscarriage, abortion, or stillbirth (s234)
+
+```{r load-packages}
+suppressMessages(library(haven))
+suppressMessages(library(tidyverse))
+suppressMessages(library(summarytools))
+```
+
+```{r variables of interest}
+vars <- c("s439_1", "s440_1", "s441_1", "v012", "v133", "s190s", "v201", "v208", "v212",
+          "v220", "v228", "v437", "v438", "m13_1", "m14_1", "m15_1", "v463a", "v463b",
+          "v463c", "v463d", "v463e", "v463f", "v463g", "s716", "s707", "s708", "s710c", "s710e",
+          "d106", "d107", "d108", "d111", "d113", "s234")
+```
+
+
+
+
+```{r load-dataset}
+df <- read_dta("C:/Users/arnab/OneDrive/Desktop/Analyses/Datasets/NFHS-4/Data/Individual Recode/IAIR74DT/IAIR74FL.DTA", col_select = vars)
+df <- haven::as_factor(df)
+
+## Dropping cases for which the variable on complication in NA
+df <- df[!(is.na(df$s439_1)),]
+```
+
+
+
+```{r Creating the Dependent Variable}
+df$any_comp <- 0
+df$any_comp[(df$s439_1 == "yes" | df$s440_1 == "yes" | df$s441_1 == "yes")] <- 1
+
+df$any_comp <- factor(df$any_comp, levels = c(0,1), labels = c("No complication", "Any complication"))
+
+freq(df$any_comp)
+```
+
+
+

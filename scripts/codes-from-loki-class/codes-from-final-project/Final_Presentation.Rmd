@@ -1,0 +1,221 @@
+---
+title: "Understanding intersectionality in community level predictors of Maternal Healthcare Utilization in India"
+author: "Arnab K. Dey"
+date: "3/2/2021"
+output:
+  slidy_presentation:
+    highlight: tango
+    slide_level: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+```{r load-packages}
+library(haven)
+library(tidyverse)
+library(summarytools)
+library(compareGroups)
+library(DiagrammeR)
+library(party)
+library(randomForest)
+```
+
+```{r load-data}
+varlist_couples <- c("v001", "v020", "v021", "v024", "v312", "v025", "v012", "mv012", 
+                     "v130", "v133", "mv133", "v205", "sm224", "s309",
+                      "v202", "v203", "v204", "v205", "v191", "v602", "mv602", "v613", "mv613",
+                     "v627", "mv627", "v628", "mv628", "v629", "mv629", "v632", "v627", 
+                     "v628", "mv627", "mv628", "v190", "v106", "v701", "mv106", "s116")
+
+df_master <- read_dta("C:/Users/arnab/OneDrive/Desktop/Analyses/Datasets/NFHS-4/Data/Couples Recode/IACR74DT/IACR74FL.dta", 
+                      col_select = all_of(varlist_couples))
+df_master <- as_factor(df_master)
+
+```
+
+```{r any modern method}
+
+df_couples <- df_master
+
+df_couples$any_modern <- with(df_couples, ifelse((v312 == "not using" | v312 == "rhythm/periodic abstinence" | 
+                                               v312 == "withdrawal" | v312 == "lactational amenorrhea (lam)" | 
+                                               v312 == "standard days"), 0, 1)) 
+
+```
+
+```{r num of children}
+df_couples$num_child <- (df_couples$v202 + df_couples$v203 + df_couples$v204 + df_couples$v205)
+
+```
+
+```{r ideal number of children}
+df_couples$w_ideal <- as.numeric(df_couples$v613)
+df_couples$m_ideal <- as.numeric(df_couples$mv613)
+```
+
+```{r individual covariates}
+## Age of women
+df_couples$w_age <- df_couples$v012
+
+## Age of Men
+df_couples$m_age <- df_couples$mv012
+
+# Education
+
+## Education - Women
+df_couples$w_edu <- as.numeric(df_couples$v133)
+
+## Education - Men
+df_couples$m_edu <- as.numeric(df_couples$mv133)
+
+```
+
+
+```{r couple level covariates}
+
+## Religion
+df_couples$islam <- ifelse(df_couples$v130 == "muslim", 1,0)
+
+## Wealth
+df_couples$wealth = ((df_couples$v191 - min(df_couples$v191))/((max(df_couples$v191)-min(df_couples$v191)))*100)
+
+## Place of residence
+df_couples <- df_couples %>% mutate(urban = ifelse(v025 == "urban", 1, 0))
+
+## State 
+df_couples <- df_couples %>% mutate(state = as.numeric(v024))
+
+```
+
+```{r dataset for analysis}
+
+df_village <- df_couples %>% 
+  select(v001, any_modern, num_child, w_ideal, m_ideal, m_age, w_age, w_edu, m_edu,
+         islam, wealth, urban, state) %>% 
+  group_by(v001) %>% 
+  summarise_all(funs(mean))
+
+df_village$v001 <- NULL
+
+```
+
+## Motivation
+
+* Despite decades long efforts by the Government to push modern contraceptive methods, usage remains low in India
+* Only 50% of couples use any modern method of contraceptive, Nationally
+* The uptake of contraceptives varies significanlty by Socio-economic factors, access and Geography
+* Huge heterogenieties exist is contraceptive use by region
+* In this study, we aim to understand the factors that contribute to contraceptive use at a cluster level
+* We also focus on understanding the intersectionalities of these factors as relates to contraceptive use
+
+## Data Source
+
+* Demographic Health Survey (DHS) Dataset for India - Couple's Dataset
+* Data collected in 2015-16 
+* Nationally representative sample of women in reproductive age (15-49 yrs)
+* Who gave birth to a child in the last 5 years prior to the survey
+* The Dataset comprises of 63,696 cases
+* Clustered in 9,624 villages across the country
+* Survey includes items asked to both partners (men and women) 
+
+## Key Variables of Interest
+
+* Outcome: Couple's use of any modern method of contraceptive
+* Primary Independent Variable: Social Norms around fertility measured via men and women's ideal number of children (Continuous)
+* **Key covariates**: 
++ Age of men and women (years)
++ Years of educational attainment of men and women 
++ Number of children that couples' have (continuous)
++ Religion (Islam / Other)
++ Household Wealth (Wealth index ranging from 0 to 100)
++ Place of Residence (Urban = 1 / Rural = 0)
++ State of residence (Categorical variable identifying one of the 36 states in India)
+
+## Analytical Approach
+
+* Undertake cluster-level analysis to understand factors that predict contraceptive use in villages
+* Use Classification and Regression Tree (CART) analysis to understand interactions between predictors
+* Undertake Random Forest analysis to understand feature importance in predicitng contraceptive use - at cluster level
+
+## Methods
+
+* **Step-1**: All variables where summarized at the cluster level by computing their mean at the village level
+* **Step-2**: CART was undertaken with contraceptive use as the dependent variables
+* **Step-3**: Random forests were generated with number of trees = 100, to get variable importance
+
+# Key descriptive statistics
+
+## Distribution of modern contraceptive uptake across clusters
+```{r plot outcome}
+ggplot(df_village, aes(x = any_modern)) +
+  geom_histogram(binwidth = 0.08, fill = "#7a6374") + 
+  xlab("Proportion of couples in the village who use any modern contraceptive") 
+```
+
+## Other covariates
+
+```{r summary of variables}
+tab1 <- compareGroups( ~ . , data = df_village)
+createTable(tab1, digits = 2, show.n = FALSE)
+```
+
+
+## Findings from Classification and Regression Tree (CART) Analysis 
+
+```{r generate-CART}
+treemodel_mcpr = ctree(any_modern ~ . , data = df_village, controls=ctree_control(testtype = c("MonteCarlo"), 
+                                                                  mincriterion = 0.95, savesplitstats = TRUE,
+                                                                  maxdepth = 4))
+
+```
+
+Average proportion of modern contraceptive users at the village level is: `r mean(df_village$any_modern)`!
+
+```{r plot CART, fig.width=20}
+
+plot(treemodel_mcpr, type = "simple")
+
+```
+
+
+# Findings from the Random Forest Model
+
+```{r random-forest}
+set.seed(0112358)
+forest_mcpr <- randomForest(any_modern~. , data = df_village, ntree = 100, importance = TRUE)
+```
+
+## Variable Importance Plot
+```{r var importance plot}
+varImpPlot(forest_mcpr)
+```
+
+
+## Variable importance coefficients
+```{r Variable importance values}
+importance(forest_mcpr)
+```
+
+## Implications
+
+* A significant proportion of villages in India have very low proportions of modern contraceptive users 
+* Our CART models suggest that social Norms around ideal number of children is an important predictor of contraceptive use at the village level
+* These social norms also intersect with key socio-demographic variables such as age and number of children to influence contraceptive use
+* Random Forest models suggests that household wealth could also be an important predictor of contraceptive use
+* Findings underscore the need to engage with couples as well as communities to address social norms and goals around fertility
+
+## Limitations
+
+* CART is a highly unstable method and cut-points can vary substantially with changes in data
+* We address this by using a Random Forest model - however that limits inference
+* These methods can be computationally expensive as well
+* Despite limitations, the broad findings from the study point have important implications 
+* Finidngs help in understanding interesting intersections and call for deeper probes into the issue
+
+# Questions?
+
+# Thank You
+
+

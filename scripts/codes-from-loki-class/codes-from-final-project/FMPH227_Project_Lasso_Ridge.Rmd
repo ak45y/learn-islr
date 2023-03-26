@@ -1,0 +1,221 @@
+---
+title: "FMPH-227_Project_Presentation"
+author: "Arnab Dey"
+date: "12/1/2020"
+output: 
+  powerpoint_presentation:
+    reference_doc: my-style.pptx
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r load-packages, message=FALSE}
+library(summarytools)
+library(tidyverse)
+library(haven)
+library(caTools)
+library(glmnet)
+library(tree)
+library(randomForest)
+library(party)
+library(caret)
+library(pROC)
+```
+
+```{r load-data}
+vars <- c("s439_1", "s440_1", "s441_1", "v012", "v133", "s190s", "v201", "v208", "v212",
+          "v220", "v228", "v437", "v438", "m14_1", "m15_1", "v463a", "v463b",
+          "v463c", "v463d", "v463e", "v463f", "v463g", "s716", "s707", "s710c", "s710e")
+
+df.proj <- read_dta("C:/Users/arnab/OneDrive/Desktop/Analyses/Datasets/NFHS-4/Data/Individual Recode/IAIR74DT/IAIR74FL.DTA", col_select = all_of(vars))
+df.proj <- as_factor(df.proj)
+
+# Remove NAs
+df.proj$s441_1[df.proj$s441_1 == "don't know"] <- NA
+df.proj <- na.omit(df.proj)
+```
+
+
+```{r rename-variables}
+df.proj <- rename(df.proj, age = v012)
+df.proj <- rename(df.proj, edu = v133)
+df.proj <- rename(df.proj, wealth_cat = s190s)
+df.proj <- rename(df.proj, tot_chil = v201)
+df.proj <- rename(df.proj, num_birth_5 = v208)
+df.proj <- rename(df.proj, age_fbirth = v212)
+df.proj <- rename(df.proj, mar_fbirth = v220)
+df.proj <- rename(df.proj, termi_preg = v228)
+df.proj <- rename(df.proj, smk_cig = v463a)
+df.proj <- rename(df.proj, smk_pip = v463b)
+df.proj <- rename(df.proj, chew_tob = v463c)
+df.proj <- rename(df.proj, snuff = v463d)
+df.proj <- rename(df.proj, smk_cigar = v463e)
+df.proj <- rename(df.proj, guthka = v463f)
+df.proj <- rename(df.proj, pan_tob = v463g)
+df.proj <- rename(df.proj, alch = s716)
+df.proj <- rename(df.proj, hookah = s710c)
+df.proj <- rename(df.proj, khaini = s710e)
+df.proj <- rename(df.proj, wgt = v437)
+df.proj <- rename(df.proj, hgt = v438)
+df.proj <- rename(df.proj, num_anc = m14_1)
+df.proj <- rename(df.proj, place_del = m15_1)
+df.proj <- rename(df.proj, breach = s439_1)
+df.proj <- rename(df.proj, prolonged = s440_1)
+df.proj <- rename(df.proj, pph = s441_1)
+
+```
+
+
+```{r one-hot-encoding}
+
+# First convert the response variable as numeric
+df.proj$pph <- as.numeric(df.proj$pph)
+
+# Perform One Hot Encoding
+dmy <- dummyVars("~.", data = df.proj, fullRank = F)
+df.hot <- data.frame(predict(dmy, newdata = df.proj))
+
+# Convert the response variable back to a factor
+df.hot$pph <- as.factor(df.hot$pph)
+
+# identify the column number of the response variable
+which(names(df.hot) == "pph")
+```
+
+
+```{r create training and test sets}
+set.seed(1423)
+data1 = sort(sample(nrow(df.hot), nrow(df.hot)*.7))
+df.train <- df.hot[data1,]
+df.test <- df.hot[-data1,]
+```
+
+
+
+```{r Prep X and Y matrices for glmnet}
+
+# Response Matrix
+y_train <- df.train$pph
+y_test <- df.test$pph
+
+# Predictor Matrix
+x_train <- data.matrix(df.train[,-2291])
+x_test <- data.matrix(df.test[,-2291])
+
+# Remove the One-hot dataframe
+rm(df.proj, df.hot, df.test, df.train, dmy, data1, vars)
+```
+
+```{r ridge regression}
+
+# Fitting the model
+set.seed(1234)
+ridge.mod <- glmnet(x_train, y_train, family = "binomial", alpha = 0)
+plot(ridge.mod, xvar = "lambda")
+
+# Cross Validation
+set.seed(1234)
+cv.out.rid <- cv.glmnet(x_train, y_train, family = "binomial", alpha = 0, type.measure = "class", nfolds = 3)
+plot(cv.out.rid)
+bestlam.rid <- cv.out.rid$lambda.min
+
+# Best Ridge model
+set.seed(1234)
+ridge.best <- glmnet(x_train, y_train, family = "binomial", alpha = 0, lambda = bestlam.rid)
+
+# Predicting on the test dataset
+set.seed(1234)
+ridge.pred <- predict(ridge.best, s = bestlam.rid, type = "class", newx = x_test)
+
+# Confusion Matrix & accuracy
+table(ridge.pred, y_test)
+mean((ridge.pred == as.numeric(y_test)))
+
+```
+
+
+```{r Lasso Regression}
+# Fitting the model
+set.seed(1234)
+lasso.mod <- glmnet(x_train, y_train, family = "binomial", alpha = 1)
+plot(lasso.mod, xvar = "lambda")
+
+# Cross Validation
+set.seed(1234)
+cv.out.lasso <- cv.glmnet(x_train, y_train, family = "binomial", alpha = 1, type.measure = "class", nfolds = 3)
+plot(cv.out.lasso)
+bestlam.lasso <- cv.out.lasso$lambda.min
+
+# Re-building the best model
+set.seed(1234)
+lasso_best <-  glmnet(x_train, y_train, family = "binomial", alpha = 1, lambda = bestlam.lasso)
+
+# Predicting on the test dataset
+set.seed(1234)
+lasso.pred <- predict(lasso_best, s = bestlam.lasso, type = "class", newx = x_test)
+
+# Confusion Matrix & accuracy
+table(lasso.pred, y_test)
+mean((lasso.pred == as.numeric(y_test)))
+```
+
+
+```{r plotting - ROC}
+
+pred.rid <- as.numeric(ridge.pred)
+pred.las <- as.numeric(lasso.pred)
+
+
+roc_ridge = roc(y_test, pred.rid)
+roc_lasso = roc(y_test, pred.las)
+
+plot(roc_ridge, col = 1, lty = 2, main = "ROC")
+plot(roc_lasso, col = 4, lty = 3, add = TRUE)
+
+
+
+
+par(pty = "s")
+ridROC <- roc(y_test ~ pred.rid, plot=TRUE,print.auc=TRUE,col="green",lwd =4,legacy.axes=TRUE,main="ROC Curve for Ridge") 
+lasROC <- roc(y_test ~ pred.las, plot=TRUE,print.auc=TRUE,col="blue",lwd = 4,print.auc.y=0.4,legacy.axes=TRUE, main="ROC Curve for Lasso")
+
+
+legend("bottomright",legend=c("Ridge Regression","Lasso"),col=c("green","blue"),lwd=4)
+
+library(ggplot2)
+
+ggroc(list(roc_ridge, roc_lasso), alpha = 0.8, linetype = 1, size = 1.5) + 
+  theme_classic() + 
+  ggtitle("Comparing Ridge and Lasso ROC curves") + 
+  geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed") +
+  theme(legend.position = "bottom",
+        legend.title = element_blank()) +
+  scale_color_discrete(labels = c("Ridge Regression", "Lasso Regression"))
+  
+
+  
+  
+
+
+
+
+?roc
+
+```
+
+
+```{r remove-heavy files}
+rm(x_train, x_test, y_train, y_test)
+```
+
+
+
+``` {r save-image}
+save.image()
+```
+
+
+
+
