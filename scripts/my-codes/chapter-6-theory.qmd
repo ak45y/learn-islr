@@ -1,0 +1,395 @@
+---
+title: "chapter-6-theory"
+format: html
+editor: source
+tag: rstats/lasso rstats/ridge
+---
+
+# Linear Model Selection and Regularization
+
+## Learning objectives {.unnumbered}
+
+1.  Select a **subset of features**\* to include in a linear model. -
+    Compare and contrast the forward stepwise, backward stepwise,
+    hybrid, and best subset methods of subset selection.
+2.  Use **shrinkage methods** to constrain the flexibility of linear
+    models.
+    -   Compare and contrast the lasso and ridge regression methods of
+        shrinkage.
+
+-   **Reduce number of dimensions** in predictors for a linear model.
+    -   Compare and contrast the PCR and PLS methods of dimension
+        reduction.
+-   Explain the challenges that may occur when fitting linear models to
+    high-dimensional data.
+
+## Context for This Chapter {.unnumbered}
+
+-   In the regression setting, the following model is commonly used.
+
+$Y = \beta_0 + \beta_1X_1 + ....\beta_pX_p$
+
+-   This model is typically fit using least squares
+
+### Why constrain or remove predictors? {.unnumbered}
+
+#### Prediction Accuracy {.unnumbered}
+
+-   Linear models have low bias
+
+    -   assuming approx linear relation bw response and preds
+    -   specially if n \>\> p
+
+-   However,
+
+    -   ... when $p \approx n$
+        -   high variance in least squares fit
+        -   over-fitting -\> poor predictions
+    -   ... when $p > n$
+        -   no longer a unique least-squares coefficient estimate
+
+        -   Infinite variance and least squares cant be used at all
+
+-   Constraining the number of predictors or shrinking their estimated
+    coefficients can reduce the variance substantially, with negligible
+    increase in bias
+
+#### Model Interpretability {.unnumbered}
+
+-   Many predictors are often *irrelevant*
+-   Including them can lead to unnecessary complexity
+-   Removing or constraining these variables can lead to easier
+    interpretation
+
+### Three approaches are discussed in this chapter {.unnumbered}
+
+-   **Subset Selection**: identifying a subset of predictors related to
+    the response
+
+-   **Shrinkage:** Fit model using all predictors, but shrink the
+    coefficients towards zero. Shrinkage (or regularization) leads to
+    reduced variance.
+
+-   **Dimension Reduction:** Projects *p* predictors to an
+    *M*-dimensional subspace *(M \< p)*
+
+## Subset Selection Methods
+
+This is a group of methods that directly reduces the number of
+predictors by removing the ones that don't improve the test error.
+
+### Best Subset Selection (BSS)
+
+-   Most straightforward approach - try them all!
+-   Fits a separate least squares regression best subset for each
+    possible combination of the *p* predictors."
+-   That is, we fit all *p* models selection that contain exactly one
+    predictor, all $(^p_2) = \frac{p!}{2!(p-2)!} = p(p - 1)/2$ models
+    that contain exactly two predictors, and so on.
+
+#### BSS Algorithm {.unnumbered}
+
+1.  Start with the null model (intercept-only model), $\mathcal{M}_0$.
+2.  For $k = 1, 2, ..., p$:
+
+-   Fit all $(^p_k)$ models containing $k$ predictors
+-   Let $\mathcal{M}_k$ denote the best of these $(^p_k)$ models, where
+    *best* is defined as having the lowest RSS, lowest deviance, etc
+
+3.  Choose the best model among $\mathcal{M}_0, ..., \mathcal{M}_p$,
+    where *best* is defined as having the lowest $C_p$, $BIC$, $AIC$,
+    cross-validated MSE, or, alternatively, *highest* adjusted $R^2$
+
+#### Pros and Cons {.unnumbered}
+
+-   Pros
+    -   Selects the best subset
+-   Cons
+    -   Overfitting due to large search space.
+    -   Computationally expensive, intractable for large $p$
+        (exponential, $2^p$, e.g. p=20 yields over 1 million
+        possibilities)
+
+### Stepwise Selection
+
+#### Forward Stepwise Subset Selection (FSSS) {.unnumbered}
+
+-   Computationally efficient alternative to BSS.
+-   Begins with a model with no predictors and adds predictors one at a
+    time - until all predictors are in the model.
+-   BSS considers all $2^p$ possible models, FSSS considers a much
+    smaller set.
+-   FSSS selects one NULL model + $p-k$ models in the $k$th iteration,
+    for $k = 0,1...,p-1$
+-   Thus, FSSS has a total of 1 +
+    $\Sigma_{k=0}^{p-1} = 1 + \frac{p(p+1)}{2}$ models
+-   This creates a substantial difference. E.g. when p = 20, BSS will
+    fit 1,048,576 models whereas FSSS will fit only 211 models
+
+##### FSSS Algorithm
+
+1.  Let $\mathcal{M}_0$ denote the null model (no predictors)
+2.  For $k = 1, ..., p$:
+
+-   Fit all $p - k$ models that augment the predictors in
+    $\mathcal{M}_{k}$ by one additional predictor.
+-   Choose the *best* predictor among these $p-k$ models, and call it
+    $\mathcal{M}_{k+1}$. Here *best* is defined as having the smallest
+    RSS or highest $R^2$
+
+3.  Select the model among $\mathcal{M}_0, ..., \mathcal{M}_k$ using
+    cross validated prediction error, $C_p$ (AIC), BIC, or adjusted
+    $R^2$
+
+#### Backward Stepwise Subset Selection (BSSS) {.unnumbered}
+
+-   Similar to FSSS but backward
+-   Start with a full least squares model with all predictors,
+-   iteratively remove the least useful predictor one at a time.
+
+##### BSSS Algorithm
+
+0.  Make sure that $n > p$
+1.  Let $\mathcal{M}_p$ denote the full model with all *p* predictors
+2.  For $k = p, p - 1, ..., 1$:
+
+-   Consider all $k$ models that result in dropping a single predictor
+    from $\mathcal{M}_k$ (thus containing $k - 1$ predictors)
+-   Choose the best among these $k$ models, and call it
+    $\mathcal{M}_{k-1}$. again, *best* defined as mdoel with smallest
+    RSS or highest $R^2$
+
+3.  Select the model among $\mathcal{M}_0, ..., \mathcal{M}_p$ that
+    minimizes validation error
+
+#### Hybrid approaches {.unnumbered}
+
+-   Combine FsSS and BsSS
+-   Variables added sequentially, but after adding, also may remove any
+    variables that no longer provide an improvement in fit.
+
+### Choosing the optimal model {.unnumbered}
+
+- Model containing all predictors will always have the smallest RSS and the highest $R^2$
+- Thus, RSS and $R^2$ are not suitable for selecting the best model.
+- As we saw in the previous chapters, we will need to estimate Test Errors. 
+- Two approaches to do that:
+  - Indirectly estimate test error by making adjustment to the training error
+  - Directly estimate test error using validation-set or cross-validation.
+
+#### Adjustment Methods {.unnumbered}
+
+- Training set MSE generally underestimates the test MSE. 
+- This is because the training set estimates coefficients in a way that specifically aims to minimize the training RSS.
+- In particular, the training error will decrease as more variables are included in the model. Whereas the test error may not.
+- Thus, we cannot use training RSS or $R^2$ to select the optimal model. 
+- However, there are a number techniques to adjust the training error for the model size.
+
+##### Common adjustment methods
+
+-   $C_p = \frac{1}{n}(RSS + 2k\hat{\sigma}^2)$
+-   $AIC = \frac{1}{n}(RSS + 2d\hat{\sigma}^2)$
+-   $BIC = \frac{1}{n}(RSS + log(n)d\hat{\sigma}^2)$
+-   adjusted $R^2 = 1 - \frac{RSS}{TSS} \cdot \frac{n-1}{n-d-1}$
+
+Where,
+- For d predictors in a model
+- $\hat{\sigma}^2$ is the estimate of the variance of the error $\epsilon$ associated with each response measurement. 
+
+### Avoiding Adjustment Methods {.unnumbered}
+-   $\hat{\sigma}^2$ is estimated using the full model cntaining all predictors - can be hard to come by
+-   adjustment methods make assumptions about true model (e.g. Gaussian
+    errors)
+-   so cross-validate!
+
+## Shrinkage Methods
+
+### Overview {.unnumbered}
+-   Shrinkage reduces variance and *can* perform variable selection
+-   'Substantial' reduction in variance for a 'slight' increase in bias
+-   Achieves these by 'penalizing' parameters
+-   Produce models 'between' the null model and the OLS estimates
+
+### Ridge Regression
+
+- For OLS, RSS is given as:
+  $RSS = \Sigma_{i=1}^n(y_i - \beta_0 - \Sigma_{j=1}^{p}\beta_jx_{ij})^2$
+- In OLS, estimates of $\beta_0, \beta_1, ... \beta_p$ are values that minimize the RSS given above
+- Ridge is very similar to that, except that coefficients are estimated by minimizing a slightly different value.  
+  $\Sigma_{i=1}^n(y_i - \beta_0 - \Sigma_{j=1}^{p}\beta_jx_{ij})^2 + \lambda\Sigma_{j=1}^p\beta_j^2$
+- This is equivalent to: $RSS + \lambda\Sigma_{j=1}^p\beta_j^2$
+- Where, $\lambda$ is tuning parameter that is determined separately.
+- $\lambda\Sigma_{j=1}^p\beta_j^2$ is called a *shrinkage penalty* and $\lambda$ is called the *tuning parameter*
+- When $\lambda = 0$, the penalty term has no effect.  But as $\lambda -> \infty$ the coefficients approach zero.
+
+-   there's one model parameter $\lambda$ doesn't shrink
+    -   ($\hat{\beta_0}$)
+
+### Ridge Regression, Visually {.unnumbered}
+
+```{r, echo=FALSE}
+knitr::include_graphics(rep("images/figure6_5.png"))
+```
+
+$$\|\beta\|_2 = \sqrt{\sum_{j=1}^p{\beta_j^2}}$$
+
+Note the decrease in test MSE, and further that this is not
+computationally expensive: "One can show that computations required to
+solve (6.5), simultaneously for all values of $\lambda$, are almost
+identical to those for fitting a model using least squares."
+
+### Preprocessing {.unnumbered}
+
+Note that $\beta_j^R$ aren't scale invariant, so:
+$$\tilde{x}_{ij} = \frac{x_{ij}}{\sqrt{\frac{1}{n}\sum_i^n{(x_{ij} - \bar{x}_j)^2}}}$$
+
+### Lasso Regression
+
+- Similar to Ridge in that it also adds a *shrinkage penalty*
+- The lasso coefficients minimize the quantity:
+  $\Sigma_{i=1}^n(y_i - \beta_0 - \Sigma_{j=1}^{p}\beta_jx_{ij})^2 + \lambda\Sigma_{j=1}^p|\beta_j|$
+  
+- This is equivalent to minimizing: $RSS + \lambda\Sigma_{j=1}^p|\beta_j|$
+
+- The only difference between the ridge and lasso regression approaches is that the $\beta_j^2$ term in ridge is replaced by $|\beta|$ in lasso
+- The effect is that in a ridge model, increasing the tuning parameter $\lambda$ reduces the coefficients, but never shrinks them to zero.
+- However, lasso shrinks some coefficients to 0
+- In that aspect, Lasso is similar to BSS in that it performs *variable selection*
+
+#### The Lasso, Visually {.unnumbered}
+
+```{r, echo=FALSE}
+knitr::include_graphics(rep("images/figure6_6.png"))
+```
+
+- Lasso Uses the 1-norm: $$\|\beta\|_1 = \sum_{j=1}^p{|\beta_j|}$$
+
+```{r, echo=FALSE}
+knitr::include_graphics(rep("images/figure6_8.png")) 
+```
+
+#### How lasso eliminiates predictors. {.unnumbered}
+
+"It can be shown" that these shrinkage methods are equivalent to a OLS
+with a constraint that depends on the type of shrinkage. For two
+parameters:
+
+-   $|\beta_1|+|\beta_2| \leq s$ for lasso,
+
+-   $\beta_1^2+\beta_2^2 \leq s$ for ridge,
+
+The value of s depends on $\lambda$. (Larger s corresponds to smaller
+$\lambda$).
+
+Graphically:
+
+```{r, echo= FALSE}
+knitr::include_graphics(rep("images/figure6_7.png"))
+```
+
+"the lasso constraint has corners at each of the axes, and so the
+ellipse will often intersect the constraint region at an axis"
+
+## Dimension Reduction Methods
+
+### Overview {.unnumbered}
+- BSS and Shrinkage methods used the original predicors and used different strategies to reduce variance.
+- Dimension reduction methods transform predictors before use.
+-   $Z_1, Z_2, ..., Z_M$ represent $M < p$ *linear combinations* of
+    original p predictors.
+
+$$Z_m = \sum_{j=1}^p{\phi_{jm}X_j}$$
+ for some constants $\phi_{1m}, \phi_{2m},... \phi_{pm}$, m = 1,...M
+ - We can then fit the linear regression model using least squares:
+
+$$y_i = \theta_0 + \sum_{m=1}^M{\theta_mz_{im} + \epsilon_i}, i = 1, ..., n$$ 
+ 
+-   If the constants $\phi_{1m}, \phi_{2m},... \phi_{pm}$ are chosen wisely, linear regression using the transformed predictors can "often"
+    outperform linear regression using the original predictors.
+
+### Principal Components Regression 
+-   PCA chooses $\phi$s to capture as much variance as possible.
+-   First principal component = direction of the data is that along
+    which the observations vary the most.
+-   Second principal component = orthogonal to 1st, capture next most
+    variation and so on
+-   Create new 'predictors' that are more independent and potentially
+    fewer, which improves test MSE, but note that this doe not help
+    improve interpretability (all $p$ predictors are still involved.)
+
+![Figure 6.14](images/fig06-14.png)
+
+![Figure 6.15](images/06_pca_1.png)
+
+#### Summarizing PCR {.unnumbered}
+- Key Idea: often a small number of principal components suffice to explain most of the variablity in the dataset as well as the response. 
+- PCR mitigates overfitting by reducing number of variables.
+- Assume that the directions in which $X$ shows the most variation are the directions associated with variation in $Y$.
+-   When assumption is true, PCR can do very well.
+-   Note: PCR isn't feature selection, since PCs depend on all $p$s.
+    -   More like ridge than lasso.
+-   Best to standardize variables before PCR.
+
+### Example of PCR {.unnumbered .unlisted}
+
+In the figures below, PCR fits on simulated data are shown. Both were
+generated usign n=50 observations and p = 45 predictors. First data set
+response uses all the predictors, while in second it uses only two. PCR
+improves over OLS at least in the first case. In the second case the
+improvement is modest, perhaps because the assumption that the
+directions of maximal variations in predictors doesnt correlate well
+with variations in the response as assumed by PCR.
+
+![Figure 6.18](images/06_pcr_simulated.png)
+
+-   When variation in $X$ isn't strongly correlated with variation in
+    $Y$, PCR isn't as effective.
+
+### Partial Least Squares {.unnumbered}
+
+#### Overview {.unnumbered}
+- Note that in PCR, we did not specify the response $y$ when generating the principal components. 
+- PCR identifies the linear combination or *directions* that best represent the predictors $X_1, .... X_p$ in an *unsupervised* way.
+- PCR uses a strong assumption that the predictors and the directions that represent them will also predict the response. 
+
+- Partial Least Squares (PLS) is a *supervised* alternative to PCA.
+- Like PCR, it identifies a set of $Z_1...Z_M$ that are a linear combination of the original predictors.
+- Unlike PCR, PLS also considers the response $y$ in identifying the components.
+
+#### The PLS approach {.unnumbered}
+- PLS computes the first direction $Z_1$ by setting each $\phi_{j1}$ equal to the coefficient from the simple linear regression of $Y$ on $X_j$.
+- These coefficients are proportional to the correlation between $Y$ on $X_j$.
+- Hence, in computing $Z_1 = \Sigma_{j=1}^p\phi_{j1}X_j$, PLS places the highest weight on the variables that are most strongly related to the response. 
+
+-   In this figure, `pop` is more related to $Y$ than is `ad`.
+-   In practice, PLS often isn't better than ridge or PCR.
+-   Supervision can reduce bias (vs PCR), but can also increase
+    variance.
+
+![Figure 6.21](images/fig06-21.png)
+
+## Considerations in High Dimensions
+
+![Figure 6.22](images/fig06-22.png)
+
+-   Modern data can have a *huge* number of predictors (eg: 500k SNPs,
+    every word ever entered in a search)
+-   When $n <= p$, linear regression memorizes the training data, but
+    can ***suck*** on test data.
+
+![Figure 6.23 - simulated data set with n = 20 training observations,
+all unrelated to outcome.](images/fig06-23.png)
+
+### Lasso (etc) vs Dimensionality {.unnumbered}
+
+-   Reducing flexibility (all the stuff in this chapter) can help.
+-   It's important to choose good tuning parameters for whatever method
+    you use.
+-   Features that aren't associated with $Y$ increase test error ("curse
+    of dimensionality").
+    -   Fit to noise in training, noise in test is different.
+-   When $p > n$, *never* use train MSE, p-values, $R^2$, etc, as
+    evidence of goodness of fit because they're likely to be wildly
+    different from test values.
+
+![Figure 6.24](images/fig06-24.png)
