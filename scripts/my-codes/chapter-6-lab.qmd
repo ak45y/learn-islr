@@ -2,6 +2,7 @@
 title: "chapter-6-lab"
 format: html
 editor: source
+tag: rstats/lasso rstats/ridge
 ---
 
 # Introductory
